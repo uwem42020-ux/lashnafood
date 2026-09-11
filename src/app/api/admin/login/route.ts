@@ -77,7 +77,6 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!admin) {
-      // Record failure (don't leak why)
       await adminDb.from("login_attempts").insert({
         email: normalizedEmail,
         ip,
@@ -117,15 +116,19 @@ export async function POST(req: Request) {
       success: true,
     });
 
-    // Optional: clear old failures for this email so next login starts fresh
+    // Clear past failures for this email so next login starts fresh
     await adminDb
       .from("login_attempts")
       .delete()
       .eq("email", normalizedEmail)
       .eq("success", false);
 
-    // Clean up very old records (best effort)
-    await adminDb.rpc("cleanup_login_attempts").catch(() => {});
+    // Clean up very old records (best effort — errors ignored)
+    try {
+      await adminDb.rpc("cleanup_login_attempts");
+    } catch {
+      // Optional — safe to ignore
+    }
 
     return NextResponse.json({ ok: true, email: data.user.email });
   } catch (err) {
