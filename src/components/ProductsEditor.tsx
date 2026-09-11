@@ -4,6 +4,8 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Spinner from "@/components/Spinner";
+import { ProductRowSkeleton } from "@/components/Skeleton";
 
 interface Product {
   id: string;
@@ -27,6 +29,8 @@ export default function ProductsEditor() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Product>>({});
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
 
   async function load() {
@@ -57,6 +61,38 @@ export default function ProductsEditor() {
     setDraft({});
   }
 
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editingId) return;
+
+    setUploading(true);
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("productId", editingId);
+
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Upload failed");
+      }
+
+      const { image, thumb } = await res.json();
+      setDraft((d) => ({ ...d, image, thumb }));
+      setMessage("✓ Image ready — click Save to apply");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function save() {
     if (!editingId) return;
     setSaving(true);
@@ -74,6 +110,8 @@ export default function ProductsEditor() {
           weight: draft.weight,
           in_stock: draft.in_stock,
           featured: draft.featured,
+          image: draft.image,
+          thumb: draft.thumb,
         }),
       });
 
@@ -94,7 +132,7 @@ export default function ProductsEditor() {
     }
   }
 
-  async function handleSoftDelete(p: Product) {
+  async function handleHide(p: Product) {
     if (
       !confirm(
         `Hide "${p.name}" from the storefront?\n\nYou can restore it anytime.`
@@ -102,7 +140,7 @@ export default function ProductsEditor() {
     )
       return;
 
-    setSaving(true);
+    setBusyId(p.id);
     try {
       const res = await fetch(`/api/admin/products/${p.id}`, {
         method: "DELETE",
@@ -114,12 +152,12 @@ export default function ProductsEditor() {
     } catch {
       setMessage("Could not hide product");
     } finally {
-      setSaving(false);
+      setBusyId(null);
     }
   }
 
   async function handleRestore(p: Product) {
-    setSaving(true);
+    setBusyId(p.id);
     try {
       const res = await fetch(`/api/admin/products/${p.id}`, {
         method: "PATCH",
@@ -133,7 +171,7 @@ export default function ProductsEditor() {
     } catch {
       setMessage("Could not restore product");
     } finally {
-      setSaving(false);
+      setBusyId(null);
     }
   }
 
@@ -143,12 +181,7 @@ export default function ProductsEditor() {
     );
     if (!confirmed) return;
 
-    const doubleConfirm = confirm(
-      `Are you absolutely sure? This cannot be reversed.`
-    );
-    if (!doubleConfirm) return;
-
-    setSaving(true);
+    setBusyId(p.id);
     try {
       const res = await fetch(`/api/admin/products/${p.id}?mode=hard`, {
         method: "DELETE",
@@ -160,13 +193,18 @@ export default function ProductsEditor() {
     } catch {
       setMessage("Could not delete product");
     } finally {
-      setSaving(false);
+      setBusyId(null);
     }
   }
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-brand-600">Loading products…</div>
+      <ul className="space-y-3">
+        <ProductRowSkeleton />
+        <ProductRowSkeleton />
+        <ProductRowSkeleton />
+        <ProductRowSkeleton />
+      </ul>
     );
   }
 
@@ -187,24 +225,26 @@ export default function ProductsEditor() {
       <ul className="space-y-3">
         {products.map((p) => {
           const isEditing = editingId === p.id;
+          const busy = busyId === p.id;
 
           return (
             <li
               key={p.id}
-              className={`bg-white border rounded-2xl p-3 ${
+              className={`bg-white border rounded-2xl p-3 transition-opacity ${
                 p.in_stock
                   ? "border-brand-100"
                   : "border-yellow-200 bg-yellow-50/30"
-              }`}
+              } ${busy ? "opacity-60" : ""}`}
             >
               <div className="flex gap-3">
                 <div className="relative w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-brand-50">
                   <Image
-                    src={p.thumb}
+                    src={isEditing ? draft.thumb || p.thumb : p.thumb}
                     alt={p.name}
                     fill
                     sizes="64px"
                     className="object-cover"
+                    unoptimized={isEditing && !!(draft.thumb && draft.thumb !== p.thumb)}
                   />
                   {!p.in_stock && (
                     <div className="absolute inset-0 bg-ink/50 flex items-center justify-center">
@@ -241,32 +281,36 @@ export default function ProductsEditor() {
                       <div className="flex flex-wrap gap-2 mt-2">
                         <button
                           onClick={() => startEdit(p)}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-500 text-white active:bg-brand-600"
+                          disabled={busy}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-500 text-white active:scale-95 active:bg-brand-600 disabled:opacity-50 transition-transform"
                         >
                           Edit
                         </button>
                         {p.in_stock ? (
                           <button
-                            onClick={() => handleSoftDelete(p)}
-                            disabled={saving}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-800 border border-yellow-200 active:bg-yellow-100 disabled:opacity-50"
+                            onClick={() => handleHide(p)}
+                            disabled={busy}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-800 border border-yellow-200 active:scale-95 active:bg-yellow-100 disabled:opacity-50 transition-transform inline-flex items-center gap-1.5"
                           >
+                            {busy ? <Spinner size={12} /> : null}
                             Hide
                           </button>
                         ) : (
                           <button
                             onClick={() => handleRestore(p)}
-                            disabled={saving}
-                            className="text-xs font-semibold px-3 py-1.5 rounded-full bg-green-50 text-green-800 border border-green-200 active:bg-green-100 disabled:opacity-50"
+                            disabled={busy}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-full bg-green-50 text-green-800 border border-green-200 active:scale-95 active:bg-green-100 disabled:opacity-50 transition-transform inline-flex items-center gap-1.5"
                           >
+                            {busy ? <Spinner size={12} /> : null}
                             Restore
                           </button>
                         )}
                         <button
                           onClick={() => handleDelete(p)}
-                          disabled={saving}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-red-50 text-red-700 border border-red-200 active:bg-red-100 disabled:opacity-50"
+                          disabled={busy}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-red-50 text-red-700 border border-red-200 active:scale-95 active:bg-red-100 disabled:opacity-50 transition-transform inline-flex items-center gap-1.5"
                         >
+                          {busy ? <Spinner size={12} /> : null}
                           Delete
                         </button>
                         {p.featured && (
@@ -278,6 +322,43 @@ export default function ProductsEditor() {
                     </>
                   ) : (
                     <div className="space-y-2">
+                      {/* Image change */}
+                      <div className="flex items-center gap-3 pb-2 border-b border-brand-100">
+                        <div className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-brand-50 border border-brand-200">
+                          <Image
+                            src={draft.thumb || p.thumb}
+                            alt="Preview"
+                            fill
+                            sizes="56px"
+                            className="object-cover"
+                            unoptimized={!!(draft.thumb && draft.thumb !== p.thumb)}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <label className="text-xs font-medium text-brand-700 cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 active:scale-95 transition-transform">
+                            {uploading ? (
+                              <>
+                                <Spinner size={12} /> Uploading…
+                              </>
+                            ) : (
+                              <>📷 Change image</>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              onChange={handleImageUpload}
+                              disabled={uploading}
+                              className="hidden"
+                            />
+                          </label>
+                          {draft.thumb && draft.thumb !== p.thumb && (
+                            <p className="text-[10px] text-green-700 mt-1">
+                              New image ready — save to apply
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
                       <input
                         type="text"
                         value={draft.name ?? ""}
@@ -374,15 +455,21 @@ export default function ProductsEditor() {
                       <div className="flex gap-2 pt-1">
                         <button
                           onClick={save}
-                          disabled={saving}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-green-600 text-white active:bg-green-700 disabled:opacity-50"
+                          disabled={saving || uploading}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-green-600 text-white active:scale-95 active:bg-green-700 disabled:opacity-50 transition-transform inline-flex items-center gap-1.5"
                         >
-                          {saving ? "Saving…" : "Save"}
+                          {saving ? (
+                            <>
+                              <Spinner size={12} /> Saving…
+                            </>
+                          ) : (
+                            "Save"
+                          )}
                         </button>
                         <button
                           onClick={cancelEdit}
-                          disabled={saving}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 active:bg-brand-100"
+                          disabled={saving || uploading}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 active:scale-95 active:bg-brand-100 disabled:opacity-50 transition-transform"
                         >
                           Cancel
                         </button>

@@ -26,6 +26,8 @@ export async function PATCH(req: Request, { params }: Params) {
     "in_stock",
     "featured",
     "sort_order",
+    "image",
+    "thumb",
   ] as const;
 
   const updates: Record<string, unknown> = {};

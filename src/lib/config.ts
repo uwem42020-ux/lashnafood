@@ -6,7 +6,7 @@ export const BUSINESS = {
   whatsappDisplay: "+234 803 677 2195",
   phone: "+2348036772195",
   email: "orders@lashnafoods.com.ng",
-  domain: "lashnafoods.com.ng",
+  domain: "www.lashnafoods.com.ng",
 
   // Bank details — UPDATE THESE when client provides real account
   bank: {
