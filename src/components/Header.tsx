@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import CartButton from "./CartButton";
+import HeaderAuthButton from "./HeaderAuthButton";
 
 export default function Header() {
   return (
@@ -23,12 +24,7 @@ export default function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          <Link
-            href="/admin/login"
-            className="px-3 py-1.5 rounded-full border border-brand-200 text-brand-700 text-sm font-medium active:bg-brand-50"
-          >
-            Login
-          </Link>
+          <HeaderAuthButton />
           <CartButton />
         </div>
       </div>
