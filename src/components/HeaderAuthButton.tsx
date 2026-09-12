@@ -8,22 +8,33 @@ import { useEffect, useState } from "react";
 export default function HeaderAuthButton() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
+  async function check() {
+    try {
+      const res = await fetch("/api/admin/status", { cache: "no-store" });
+      const d = await res.json();
+      setIsAdmin(!!d.admin);
+    } catch {
+      setIsAdmin(false);
+    }
+  }
+
   useEffect(() => {
-    let active = true;
-    fetch("/api/admin/status")
-      .then((r) => r.json())
-      .then((d) => {
-        if (active) setIsAdmin(!!d.admin);
-      })
-      .catch(() => {
-        if (active) setIsAdmin(false);
-      });
+    check();
+
+    const onAuthChange = () => check();
+    window.addEventListener("lashna-auth-change", onAuthChange);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
-      active = false;
+      window.removeEventListener("lashna-auth-change", onAuthChange);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
-  // Hide until we know (avoids flashing the wrong label)
   if (isAdmin === null) {
     return (
       <div className="w-[68px] h-[30px] rounded-full bg-brand-100/60 animate-pulse" />

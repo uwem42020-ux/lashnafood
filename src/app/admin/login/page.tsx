@@ -41,6 +41,9 @@ export default function AdminLogin() {
         throw new Error(data.error || "Login failed");
       }
 
+      // Notify the header that auth state changed
+      window.dispatchEvent(new Event("lashna-auth-change"));
+
       router.push("/admin");
       router.refresh();
     } catch (err) {
@@ -100,7 +103,6 @@ export default function AdminLogin() {
               tabIndex={-1}
             >
               {showPassword ? (
-                // Eye-off icon
                 <svg
                   width="20"
                   height="20"
@@ -116,7 +118,6 @@ export default function AdminLogin() {
                   <line x1="1" y1="1" x2="23" y2="23" />
                 </svg>
               ) : (
-                // Eye icon
                 <svg
                   width="20"
                   height="20"
@@ -137,13 +138,7 @@ export default function AdminLogin() {
         </div>
 
         {error && (
-          <div
-            className={`text-sm rounded-xl px-3 py-2 ${
-              locked
-                ? "bg-red-50 border border-red-200 text-red-700"
-                : "bg-red-50 border border-red-200 text-red-700"
-            }`}
-          >
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-3 py-2">
             {error}
           </div>
         )}
@@ -166,8 +161,8 @@ export default function AdminLogin() {
 
         {locked && (
           <p className="text-xs text-brand-500 text-center">
-            Too many failed attempts. The lock clears automatically after
-            15 minutes.
+            Too many failed attempts. The lock clears automatically after 15
+            minutes.
           </p>
         )}
       </form>
